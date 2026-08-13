@@ -28,7 +28,13 @@ jobs:
       fail-fast: false
       matrix:
         php: ['8.3', '8.4']
-        laravel: ['^11.0', '^12.0']
+        # Laravel 11 is missing, though composer.json still allows it: every
+        # 11.x release now carries an unpatched security advisory, so Composer
+        # refuses to install one and the leg cannot be made to resolve at all.
+        # Testing what the studio would actually deploy rather than turning the
+        # audit off. If nothing is going to be built on 11 again, the constraint
+        # in composer.json should be narrowed to match.
+        laravel: ['^12.0', '^13.0']
 
     steps:
       - uses: actions/checkout@v4

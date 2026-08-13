@@ -209,10 +209,17 @@ jobs:
             exit 1
           }
 
-          # Left cached, the tests below would run against this check's .env
-          # rather than their own.
+          # Cleared, or the tests below read this step's cache rather than
+          # their own configuration. The key itself stays in .env on purpose —
+          # see the next step.
           php artisan config:clear
 
+      # Deliberately run with the review key still set, so the kit's own suite
+      # runs with the widget injected into every response it asserts against.
+      # That is not incidental: injecting used to replace what the response was
+      # rendered from, and every assertInertia in four of these kits failed on
+      # a difference no browser would ever see. An application whose tests this
+      # package breaks is an application the studio cannot ship.
       - name: Boot it and run its tests
         working-directory: app
         run: |

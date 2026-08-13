@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\View;
 use Overlook\Foundation\Review\WidgetMarkup;
 
 function serving(string $body, array $headers = ['Content-Type' => 'text/html']): void
@@ -97,6 +98,25 @@ it('escapes the project key rather than trusting it into an attribute', function
     serving('<html><body></body></html>');
 
     expect($this->get('/page')->getContent())->not->toContain('onload="alert(1)"');
+});
+
+/**
+ * The regression that broke four starter kits at once. setContent replaces
+ * whatever the response was rendered from, and for a view-backed response —
+ * which every Inertia page is — that is the view assertViewIs, assertViewHas
+ * and assertInertia read back. Injecting without putting it back fails the
+ * test suite of every application this package is installed in.
+ */
+it('leaves the rendered view on the response for assertions to read', function () {
+    connected();
+    View::addLocation(__DIR__.'/fixtures/views');
+    Route::middleware('web')->get('/page', fn () => view('widget-page'));
+
+    $response = $this->get('/page');
+
+    expect($response->getContent())->toContain('sidebarv2.js?apikey=proj-key');
+
+    $response->assertViewIs('widget-page');
 });
 
 it('names the same fragment key the studio builds review links with', function () {

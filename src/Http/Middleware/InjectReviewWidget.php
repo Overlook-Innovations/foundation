@@ -65,7 +65,20 @@ class InjectReviewWidget
 
         $content = substr($content, 0, $position).WidgetMarkup::for($key).substr($content, $position);
 
+        /**
+         * What the response was rendered from, which setContent overwrites with
+         * the string it is given. Nothing serving the page cares, but every
+         * assertion about it does: assertViewIs, assertViewHas and Inertia's
+         * assertInertia all read the view back off the response, and against a
+         * string they report the page is not a view at all. Left alone, this
+         * middleware fails the test suite of every application it is installed
+         * in — for a difference the browser never sees.
+         */
+        $original = $response->original;
+
         $response->setContent($content);
+
+        $response->original = $original;
 
         /**
          * setContent leaves any Content-Length the response already declared,
