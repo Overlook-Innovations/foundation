@@ -1,0 +1,18 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": ["config:recommended"],
+    "packageRules": [
+        {
+            "description": "The studio's conventions land on their own, and merge themselves. This is the mechanism that makes a fix here reach the sites already built rather than only the next one.",
+            "matchPackageNames": ["overlook/foundation"],
+            "automerge": true,
+            "schedule": ["before 6am on monday"]
+        },
+        {
+            "description": "Framework majors are a decision, not a bump. Grouped so the upgrade is read as one change.",
+            "matchPackageNames": ["laravel/framework"],
+            "matchUpdateTypes": ["major"],
+            "dependencyDashboardApproval": true
+        }
+    ]
+}

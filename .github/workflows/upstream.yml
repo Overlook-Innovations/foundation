@@ -1,0 +1,140 @@
+name: Upstream
+
+# The check that makes the scaffolder's promise honest.
+#
+# Applications are generated from whatever the Laravel installer ships that day,
+# deliberately unpinned — that is the entire point. The cost of that choice is
+# that an upstream release can break provisioning without anything here
+# changing. So this runs nightly against the real installer and every starter
+# kit the studio offers, and turns a client watching a failed provision into a
+# cron failure somebody sees on a Tuesday morning.
+#
+# It is not a substitute for the package's own unit tests. Those run on push;
+# this one asks a different question — does the world still fit together.
+
+on:
+  schedule:
+    # 06:00 UTC, so a failure is waiting at the start of the working day rather
+    # than arriving in the middle of it.
+    - cron: '0 6 * * *'
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    name: ${{ matrix.kit || 'no kit' }}${{ matrix.auth }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      # Every combination is reported, because "React is broken" and "everything
+      # is broken" need different responses and fail-fast cannot tell them apart.
+      fail-fast: false
+      matrix:
+        kit: ['', '--vue', '--react', '--livewire', '--svelte']
+        auth: ['']
+        include:
+          # The no-auth path exercises different installer branches than the
+          # default one, and it is what the studio picks most often.
+          - kit: '--vue'
+            auth: ' --no-authentication'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: foundation
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, bcmath
+          coverage: none
+
+      - name: Install the Laravel installer
+        run: |
+          set -euo pipefail
+          composer global require laravel/installer --no-interaction --no-progress
+          echo "$(composer -n config --global home)/vendor/bin" >> "$GITHUB_PATH"
+
+      - name: Generate an application
+        env:
+          KIT: ${{ matrix.kit }}
+          AUTH: ${{ matrix.auth }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 -- both are fixed strings from the matrix.
+          laravel new app --no-interaction --pest --no-node --database=pgsql $KIT $AUTH
+
+      # From the checkout rather than from Packagist, so a change is tested
+      # before it is tagged rather than after somebody's site is built on it.
+      - name: Install this package from the working copy
+        working-directory: app
+        run: |
+          set -euo pipefail
+          composer config repositories.foundation path ../foundation
+          composer require overlook/foundation:@dev --no-interaction --no-progress
+
+      - name: Apply the conventions
+        working-directory: app
+        run: |
+          set -euo pipefail
+          php artisan overlook:install --no-interaction
+
+          # A baseline to diff the second run against. The installer may or may
+          # not have made a repository here depending on its version, so this
+          # does not assume one.
+          git init -q 2>/dev/null || true
+          git config user.email ci@example.com
+          git config user.name CI
+          git add -A
+          git commit -qm "After the first install" --allow-empty
+
+      # Twice, because the first run is the only one the scaffolder performs and
+      # every run after it happens on a client repository following a version
+      # bump — where a command that rewrites files on each run would show up as
+      # unexplained churn in somebody's pull request.
+      - name: Apply them again, and expect nothing to change
+        working-directory: app
+        run: |
+          set -euo pipefail
+          php artisan overlook:install --no-interaction
+
+          if ! git diff --quiet || [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            echo "::error::overlook:install is not idempotent — a second run changed files."
+            exit 1
+          fi
+
+      # The contract the studio's provisioner depends on. If these names stop
+      # resolving, buckets attach to disks nothing writes to, and the failure
+      # surfaces as a broken upload on a client's site rather than here.
+      - name: Check the storage contract still holds
+        working-directory: app
+        run: |
+          set -euo pipefail
+          disks=$(php artisan config:show filesystems.disks)
+          echo "$disks"
+
+          for disk in private media; do
+            grep -q "^ *${disk} " <<<"$disks" || {
+              echo "::error::The ${disk} disk is no longer declared."
+              exit 1
+            }
+          done
+
+      - name: Boot it and run its tests
+        working-directory: app
+        run: |
+          set -euo pipefail
+          php artisan about --only=environment
+          php artisan test
