@@ -132,6 +132,29 @@ jobs:
             }
           done
 
+      # The application is generated with --no-node, exactly as the scaffolder
+      # generates it, because Laravel Cloud builds assets on deploy and a
+      # repository carrying a built bundle would be carrying a stale one.
+      #
+      # It still has to be buildable, though, and a starter kit's own
+      # ExampleTest renders a Blade view with @vite in it — so without this the
+      # kits fail on a missing manifest, which says nothing about whether they
+      # actually work. Building here checks the half of the deploy that the PHP
+      # side cannot.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build the assets Cloud would build
+        working-directory: app
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+
       - name: Boot it and run its tests
         working-directory: app
         run: |
