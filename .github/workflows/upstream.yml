@@ -66,6 +66,13 @@ jobs:
           composer global require laravel/installer --no-interaction --no-progress
           echo "$(composer -n config --global home)/vendor/bin" >> "$GITHUB_PATH"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Generated exactly as the scaffolder generates it, lockfile included.
+      # Anything this workflow does differently is a gap it cannot see.
       - name: Generate an application
         env:
           KIT: ${{ matrix.kit }}
@@ -74,6 +81,7 @@ jobs:
           set -euo pipefail
           # shellcheck disable=SC2086 -- both are fixed strings from the matrix.
           laravel new app --no-interaction --pest --no-node --database=pgsql $KIT $AUTH
+          cd app && npm install --package-lock-only --no-audit --no-fund
 
       # From the checkout rather than from Packagist, so a change is tested
       # before it is tagged rather than after somebody's site is built on it.
@@ -132,22 +140,18 @@ jobs:
             }
           done
 
-      # The application is generated with --no-node, exactly as the scaffolder
-      # generates it, because Laravel Cloud builds assets on deploy and a
-      # repository carrying a built bundle would be carrying a stale one.
+      # The repository is pushed without node_modules or a built bundle —
+      # Cloud builds assets on deploy, and a committed bundle would only ever
+      # be a stale one. So this is Cloud's build, run here: npm ci against the
+      # committed lockfile, then vite.
       #
-      # It still has to be buildable, though, and a starter kit's own
-      # ExampleTest renders a Blade view with @vite in it — so without this the
-      # kits fail on a missing manifest, which says nothing about whether they
-      # actually work. Building here checks the half of the deploy that the PHP
-      # side cannot.
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
+      # It is also the only thing that exercises the lockfile. A missing or
+      # unsatisfiable one fails npm ci exactly like this, rather than on a
+      # client's first deploy.
+      #
+      # And a starter kit's own ExampleTest renders a Blade view containing
+      # @vite, so without a build the kits fail on a missing manifest — which
+      # says nothing about whether the kit works.
       - name: Build the assets Cloud would build
         working-directory: app
         run: |
