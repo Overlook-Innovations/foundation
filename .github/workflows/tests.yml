@@ -1,0 +1,55 @@
+name: Tests
+
+# The package's own unit tests, which the Upstream workflow is explicitly not a
+# substitute for. That one asks whether the world still fits together and takes
+# twenty minutes to answer; this one asks whether this package does what it says
+# and answers in seconds, on every push.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: PHP ${{ matrix.php }}, Laravel ${{ matrix.laravel }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+        laravel: ['^11.0', '^12.0']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip
+          coverage: none
+
+      # The lower bound is tested as well as the upper, because the package
+      # declares support for a range and only one end of it gets used in anger.
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          composer require "illuminate/support:${{ matrix.laravel }}" --no-interaction --no-update
+          composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Check formatting
+        run: vendor/bin/pint --test
+
+      - name: Run the tests
+        run: vendor/bin/pest

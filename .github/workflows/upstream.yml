@@ -170,6 +170,49 @@ jobs:
           npm ci
           npm run build
 
+      # The check that would have caught the widget never shipping at all. Every
+      # record on the studio's side said the environment was connected to a
+      # review project; nothing ever looked at the page it was connected to, and
+      # the first site went out with no widget on it. This looks at the page.
+      #
+      # Against the real front page rather than a route invented for the check,
+      # because that is the document a client actually opens, and each starter
+      # kit renders it differently.
+      - name: Check the review widget reaches the page
+        working-directory: app
+        run: |
+          set -euo pipefail
+
+          # The key the provisioner would have written, and a session driver
+          # that does not need the database this job never started.
+          printf '\nBUGHERD_PROJECT_KEY=upstream-check\n' >> .env
+          sed -i 's/^SESSION_DRIVER=.*/SESSION_DRIVER=file/' .env
+
+          # Cached, because that is how a deployed site runs. A widget wired up
+          # through env() at request time works everywhere except there, which
+          # is the one place it matters.
+          php artisan config:cache
+
+          php artisan serve --port=8123 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8123 >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+          page=$(curl -fsS http://127.0.0.1:8123)
+
+          grep -q 'sidebarv2.js?apikey=upstream-check' <<<"$page" || {
+            echo "::error::The review widget did not reach the page."
+            exit 1
+          }
+
+          # Left cached, the tests below would run against this check's .env
+          # rather than their own.
+          php artisan config:clear
+
       - name: Boot it and run its tests
         working-directory: app
         run: |

@@ -2,8 +2,10 @@
 
 namespace Overlook\Foundation;
 
+use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Support\ServiceProvider;
 use Overlook\Foundation\Console\InstallCommand;
+use Overlook\Foundation\Http\Middleware\InjectReviewWidget;
 
 /**
  * The studio's conventions, as behaviour rather than as files.
@@ -24,11 +26,20 @@ class FoundationServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        /**
+         * Merged, never published. The application gets the values without
+         * getting a copy of the file, so this package can still change them —
+         * which is the whole arrangement, applied to its own configuration.
+         */
+        $this->mergeConfigFrom(__DIR__.'/../config/foundation.php', 'foundation');
+
         $this->registerObjectStorage();
     }
 
     public function boot(): void
     {
+        $this->registerReviewWidget();
+
         if ($this->app->runningInConsole()) {
             $this->commands([InstallCommand::class]);
 
@@ -36,6 +47,33 @@ class FoundationServiceProvider extends ServiceProvider
                 __DIR__.'/../stubs' => base_path(),
             ], 'overlook-foundation');
         }
+    }
+
+    /**
+     * Puts the client review widget on every page the application serves.
+     *
+     * Registered from here because a generated application owns its
+     * bootstrap/app.php and the studio never edits it — the same reason the tag
+     * is injected rather than placed in a layout.
+     *
+     * Added to the HTTP kernel rather than to the router's "web" group, which
+     * looks like the obvious home and silently does not work. The kernel
+     * replaces every group wholesale in syncMiddlewareToRouter() when it is
+     * constructed, and it is constructed lazily — so a group entry added while
+     * providers boot is discarded before the first request is dispatched, with
+     * nothing logged and the group still reading correctly if something asks it
+     * in between. That cost a while to find; it is written down so it is not
+     * found twice.
+     *
+     * Global middleware is also the position this wants. It wraps everything,
+     * so it is the last to see the response and injects into the document that
+     * is really sent. The content type guard keeps it off API traffic.
+     */
+    private function registerReviewWidget(): void
+    {
+        $this->callAfterResolving(HttpKernel::class, function (HttpKernel $kernel): void {
+            $kernel->pushMiddleware(InjectReviewWidget::class);
+        });
     }
 
     /**
