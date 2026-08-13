@@ -140,6 +140,17 @@ jobs:
             }
           done
 
+          # Declaring the disks is half of it. Laravel ships FILESYSTEM_DISK
+          # set to "local" and the first version of overlook:install skipped
+          # any key already present, so the default never applied and every
+          # generated site was pointed at a container disk that a deploy
+          # discards. It passed this workflow, because nothing looked.
+          grep -qx 'FILESYSTEM_DISK=private' .env.example || {
+            echo "::error::.env.example does not select the private disk:"
+            grep '^FILESYSTEM_DISK=' .env.example || echo "  (key absent)"
+            exit 1
+          }
+
       # The repository is pushed without node_modules or a built bundle —
       # Cloud builds assets on deploy, and a committed bundle would only ever
       # be a stale one. So this is Cloud's build, run here: npm ci against the

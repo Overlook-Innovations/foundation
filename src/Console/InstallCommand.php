@@ -25,18 +25,37 @@ class InstallCommand extends Command
     protected $description = "Apply the studio's conventions to this application";
 
     /**
-     * Environment defaults the platform does not inject.
+     * Values corrected whatever the file already says.
      *
-     * Laravel Cloud sets the database, cache and storage credentials itself, so
-     * these are only the values it cannot know. FILESYSTEM_DISK is here because
-     * an application that boots pointing at "local" writes uploads to a
-     * container disk that is discarded on the next deploy — which demos
-     * perfectly and then loses everything.
+     * FILESYSTEM_DISK is the storage contract and has to be asserted rather
+     * than defaulted. Laravel always ships the key in .env.example set to
+     * "local", so a rule that only fills absent keys never fires — and the
+     * application boots writing uploads to a container disk that is discarded
+     * on the next deploy. That demos perfectly and then loses everything, which
+     * is the failure this package exists to prevent and the first version of
+     * this command shipped unable to prevent.
+     *
+     * Overwriting somebody's edit is the lesser risk. There is no legitimate
+     * reason for an application the studio hosts to write to local disk, and
+     * "private" is one of the two disk names Cloud matches its buckets against.
+     *
+     * @var array<string, string>
+     */
+    private const array ENVIRONMENT_ASSERTIONS = [
+        'FILESYSTEM_DISK' => 'private',
+    ];
+
+    /**
+     * Values added only when the file does not mention them at all.
+     *
+     * These agree with Laravel's own defaults today, and are written down so
+     * they survive upstream changing its mind. An existing value is somebody's
+     * decision and is left alone — which is a safe rule here precisely because
+     * nothing below is a contract anyone else depends on.
      *
      * @var array<string, string>
      */
     private const array ENVIRONMENT_DEFAULTS = [
-        'FILESYSTEM_DISK' => 'private',
         'SESSION_DRIVER' => 'database',
         'QUEUE_CONNECTION' => 'database',
     ];
@@ -48,7 +67,7 @@ class InstallCommand extends Command
             '--force' => $this->option('force') ?: null,
         ]));
 
-        $this->applyEnvironmentDefaults();
+        $this->applyEnvironmentValues();
 
         $this->components->info('Studio conventions applied.');
 
@@ -56,17 +75,19 @@ class InstallCommand extends Command
     }
 
     /**
-     * Appends the defaults to .env.example, and to .env when one exists.
+     * Corrects the assertions and appends the missing defaults, in .env.example
+     * and in .env when one exists.
      *
-     * Appended rather than templated: the installer writes both files and their
-     * contents move between Laravel releases, so replacing them would put this
-     * package in the business of tracking upstream's environment file — which
-     * is the drift the whole arrangement exists to avoid.
+     * Edited in place rather than templated: the installer writes both files
+     * and their contents move between Laravel releases, so replacing them
+     * wholesale would put this package in the business of tracking upstream's
+     * environment file — which is the drift the whole arrangement exists to
+     * avoid.
      *
-     * A key already present is left exactly as it is, whatever its value.
-     * Somebody who changed it meant to.
+     * Idempotent either way. A second run finds every assertion already correct
+     * and every default already present, and writes nothing.
      */
-    private function applyEnvironmentDefaults(): void
+    private function applyEnvironmentValues(): void
     {
         foreach (['.env', '.env.example'] as $file) {
             $path = base_path($file);
@@ -75,7 +96,21 @@ class InstallCommand extends Command
                 continue;
             }
 
-            $contents = File::get($path);
+            $original = File::get($path);
+            $contents = $original;
+
+            foreach (self::ENVIRONMENT_ASSERTIONS as $key => $value) {
+                $pattern = '/^'.preg_quote($key, '/').'=.*$/m';
+
+                if (preg_match($pattern, $contents) === 1) {
+                    $contents = (string) preg_replace($pattern, "{$key}={$value}", $contents);
+
+                    continue;
+                }
+
+                $contents = rtrim($contents, "\n")."\n{$key}={$value}\n";
+            }
+
             $additions = [];
 
             foreach (self::ENVIRONMENT_DEFAULTS as $key => $value) {
@@ -86,13 +121,17 @@ class InstallCommand extends Command
                 $additions[] = "{$key}={$value}";
             }
 
-            if ($additions === []) {
+            if ($additions !== []) {
+                $contents = rtrim($contents, "\n")."\n\n".implode("\n", $additions)."\n";
+            }
+
+            if ($contents === $original) {
                 continue;
             }
 
-            File::put($path, rtrim($contents, "\n")."\n\n".implode("\n", $additions)."\n");
+            File::put($path, $contents);
 
-            $this->components->task("Added ".count($additions)." defaults to {$file}");
+            $this->components->task("Applied the studio's environment values to {$file}");
         }
     }
 }
