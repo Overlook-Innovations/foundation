@@ -51,6 +51,11 @@ class FoundationServiceProvider extends ServiceProvider
      * Set from here rather than published as a config/filesystems.php, which
      * would freeze that file at whatever Laravel shipped the day it was copied.
      *
+     * The s3 driver these name is supplied by this package's own requirement on
+     * league/flysystem-aws-s3-v3. Declaring the disks without it is what made
+     * every provision fail at its first deploy: Cloud attaches the buckets, sees
+     * an application that cannot read them, and refuses.
+     *
      * Two disks rather than one because Cloud's object storage is Cloudflare
      * R2, which fixes visibility on the bucket and rejects a per-object ACL — so
      * one bucket cannot hold both a public avatar and a private signed

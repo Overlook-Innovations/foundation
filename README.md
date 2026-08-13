@@ -33,6 +33,12 @@ has to declare the names — which `FoundationServiceProvider` does.
 Rename either and buckets attach to a disk nothing writes to. The nightly
 `Upstream` workflow checks both still resolve.
 
+Declaring an `s3` disk is only half of it, which is why this package requires
+`league/flysystem-aws-s3-v3` rather than leaving it to the application. Without
+the adapter Cloud refuses the very first deploy — "your application has an
+attached bucket but is missing the package" — and a build that got that far has
+already created the repository, the application and the buckets.
+
 ## Upstream drift
 
 Applications are generated from whatever the Laravel installer ships that day,
