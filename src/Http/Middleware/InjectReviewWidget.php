@@ -29,10 +29,33 @@ class InjectReviewWidget
     {
         $response = $next($request);
 
-        $key = config('foundation.review.key');
+        /**
+         * A live site never carries the widget, and this is the last place that
+         * can be true regardless of what the environment says.
+         *
+         * The studio's provisioner withholds both variables from a production
+         * environment and refuses the switch that would connect one, so
+         * reaching here with a key set means somebody typed one into a
+         * dashboard by hand. That is exactly the case worth catching: the
+         * widget is a launcher in the corner of every page, addressed to
+         * whoever is looking, and the people looking at a live site are the
+         * client's own visitors.
+         */
+        if (app()->environment('production')) {
+            return $response;
+        }
 
-        /** The ordinary case on every production site: nothing to inject. */
-        if (! config('foundation.review.enabled') || ! is_string($key) || $key === '') {
+        $key = config('foundation.review.key');
+        $source = config('foundation.review.url');
+
+        /**
+         * The ordinary case on every production site: nothing to inject. Both
+         * are required — a tag with an address and no key reports nowhere, and
+         * a tag with a key and no address does not load at all.
+         */
+        if (! config('foundation.review.enabled')
+            || ! is_string($key) || $key === ''
+            || ! is_string($source) || $source === '') {
             return $response;
         }
 
@@ -63,7 +86,7 @@ class InjectReviewWidget
             return $response;
         }
 
-        $content = substr($content, 0, $position).WidgetMarkup::for($key).substr($content, $position);
+        $content = substr($content, 0, $position).WidgetMarkup::for($key, $source).substr($content, $position);
 
         /**
          * What the response was rendered from, which setContent overwrites with

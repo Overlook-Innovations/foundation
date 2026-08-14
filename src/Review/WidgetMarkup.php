@@ -5,89 +5,37 @@ namespace Overlook\Foundation\Review;
 /**
  * Builds the markup that loads the client review widget.
  *
- * Two tags, and the order between them is load-bearing. BugHerd reads its
- * settings from a global the moment its script runs, so the configuration has
- * to be defined first. The loader is async — it may execute at any point after
- * the parser reaches it — while an inline script always runs during parse, so
- * writing the configuration inline above the loader is what guarantees it is
- * there in time. Swap them and the prefill works only when the network is slow.
+ * One tag, and it used to be two. The widget this replaced read its settings
+ * from a global the moment its script ran, so a second inline script had to
+ * define that configuration first and the order between them was load-bearing.
+ * The studio's own widget reads everything off its own tag — the key from a data
+ * attribute, its endpoint and second bundle from its own src — so there is
+ * nothing to define ahead of it and no ordering to get wrong.
+ *
+ * Neither value is hardcoded here. The address arrives from the provisioner
+ * alongside the key, which is the difference between one widget address shared
+ * by every site on the internet and one served by whichever installation of the
+ * studio's application built this site. That also removes the constant this
+ * class used to hold and the studio had to keep in step with its own code.
  */
 class WidgetMarkup
 {
     /**
-     * Where the widget is loaded from.
-     *
-     * The studio's `feedback:verify-widget` looks for this address in the page
-     * it fetches, which is the only check that the two halves of this
-     * arrangement still agree. Changing it means changing
-     * BugHerdVisualFeedbackProvider::widgetScriptUrl() to match.
+     * @param  string  $key  Names the environment a report is filed against. Public by
+     *                       necessity — it is printed here, in the source of a page anyone
+     *                       can read — and guards nothing on its own.
+     * @param  string  $source  Where the loader is served from. The widget derives its
+     *                          ingest endpoint and its second bundle from this, so it is
+     *                          the only address that has to be right.
      */
-    public const string SCRIPT_URL = 'https://www.bugherd.com/sidebarv2.js';
-
-    /**
-     * The fragment key the reviewer's address arrives under.
-     *
-     * Named once on each side — here, and in BugHerdVisualFeedbackProvider,
-     * which builds the review link. Renaming it breaks prefill silently, since
-     * a fragment nobody reads looks exactly like a reviewer who was never sent
-     * one.
-     */
-    public const string REPORTER_FRAGMENT_KEY = 'ovr';
-
-    public static function for(string $projectKey): string
+    public static function for(string $key, string $source): string
     {
-        /** Attribute context: the key is the studio's, but it is still escaped. */
-        $key = htmlspecialchars($projectKey, ENT_QUOTES, 'UTF-8');
-
-        $fragmentKey = json_encode(self::REPORTER_FRAGMENT_KEY, JSON_THROW_ON_ERROR);
-        $scriptUrl = self::SCRIPT_URL;
+        /** Attribute context: both are the studio's own values, and both are still escaped. */
+        $key = htmlspecialchars($key, ENT_QUOTES, 'UTF-8');
+        $source = htmlspecialchars($source, ENT_QUOTES, 'UTF-8');
 
         return <<<HTML
-        <script>(function () {
-            var key = {$fragmentKey};
-            var config = window.BugHerdConfig = window.BugHerdConfig || {};
-            var hash = window.location.hash.slice(1);
-
-            if (!hash) {
-                return;
-            }
-
-            var email = null;
-            var kept = [];
-
-            hash.split('&').forEach(function (part) {
-                var separator = part.indexOf('=');
-
-                if (separator > 0 && part.slice(0, separator) === key) {
-                    email = decodeURIComponent(part.slice(separator + 1));
-
-                    return;
-                }
-
-                kept.push(part);
-            });
-
-            if (email === null) {
-                return;
-            }
-
-            if (email) {
-                config.reporter = config.reporter || {};
-                config.reporter.email = email;
-            }
-
-            /**
-             * Taken back out of the address bar once it has been read, so the
-             * reviewer's address does not sit in a history entry or get handed
-             * to anything the page links to next.
-             */
-            window.history.replaceState(
-                null,
-                '',
-                window.location.pathname + window.location.search + (kept.length ? '#' + kept.join('&') : '')
-            );
-        })();</script>
-        <script async src="{$scriptUrl}?apikey={$key}"></script>
+        <script async src="{$source}" data-overlook-key="{$key}"></script>
         HTML;
     }
 }
