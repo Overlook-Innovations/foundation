@@ -185,7 +185,7 @@ jobs:
 
           # The key the provisioner would have written, and a session driver
           # that does not need the database this job never started.
-          printf '\nBUGHERD_PROJECT_KEY=upstream-check\n' >> .env
+          printf '\nOVERLOOK_REVIEW_KEY=upstream-check\nOVERLOOK_REVIEW_URL=https://review.example.test\n' >> .env
           sed -i 's/^SESSION_DRIVER=.*/SESSION_DRIVER=file/' .env
 
           # Cached, because that is how a deployed site runs. A widget wired up
@@ -204,7 +204,7 @@ jobs:
 
           page=$(curl -fsS http://127.0.0.1:8123)
 
-          grep -q 'sidebarv2.js?apikey=upstream-check' <<<"$page" || {
+          grep -q 'data-overlook-key="upstream-check"' <<<"$page" || {
             echo "::error::The review widget did not reach the page."
             exit 1
           }
