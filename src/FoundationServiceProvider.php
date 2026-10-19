@@ -5,6 +5,7 @@ namespace Overlook\Foundation;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Support\ServiceProvider;
 use Overlook\Foundation\Console\InstallCommand;
+use Overlook\Foundation\Http\Middleware\InjectAnalyticsBeacon;
 use Overlook\Foundation\Http\Middleware\InjectReviewWidget;
 
 /**
@@ -73,6 +74,7 @@ class FoundationServiceProvider extends ServiceProvider
     {
         $this->callAfterResolving(HttpKernel::class, function (HttpKernel $kernel): void {
             $kernel->pushMiddleware(InjectReviewWidget::class);
+            $kernel->pushMiddleware(InjectAnalyticsBeacon::class);
         });
     }
 

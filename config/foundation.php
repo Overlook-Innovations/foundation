@@ -41,4 +41,24 @@ return [
         'enabled' => env('FOUNDATION_REVIEW_ENABLED', true),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Analytics
+    |--------------------------------------------------------------------------
+    |
+    | The studio's first-party page-view beacon on a live site. The provisioner
+    | writes both values into a production environment when the studio has
+    | analytics switched on; without both, nothing is injected. Read here, not
+    | at request time, for the config:cache reason given above.
+    |
+    */
+
+    'analytics' => [
+        'key' => env('OVERLOOK_ANALYTICS_KEY'),
+        'url' => env('OVERLOOK_ANALYTICS_URL'),
+
+        /** For a client who does not want their visitors counted. */
+        'enabled' => env('FOUNDATION_ANALYTICS_ENABLED', true),
+    ],
+
 ];
